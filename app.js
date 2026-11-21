@@ -8,7 +8,11 @@ const store = {
 };
 
 // ---------- rate ----------
-let rate = store.get('rate', { v: BUILT_IN_RATE, date: BUILT_IN_DATE, src: 'built-in' });
+const okRate = (v) => Number.isFinite(v) && v > 100 && v < 1000;
+const cleanDate = (d) => (typeof d === 'string' && /^[\w\- :]{0,20}$/.test(d) ? d : new Date().toISOString().slice(0, 10));
+let rate = store.get('rate', null);
+if (!rate || !okRate(Number(rate.v))) rate = { v: BUILT_IN_RATE, date: BUILT_IN_DATE, src: 'built-in' };
+rate = { v: Number(rate.v), date: cleanDate(rate.date), src: String(rate.src).slice(0, 10) };
 if (rate.src === 'live') rate.src = 'cached';
 function showRate() {
   $('rateText').textContent = `1 ₹ = ${rate.v.toFixed(2)} ₫ · ${rate.date} · ${rate.src}`;
@@ -23,9 +27,10 @@ async function fetchRate() {
   for (const [url, pick] of srcs) {
     try {
       const r = await fetch(url, { cache: 'no-store' });
-      const [v, date] = pick(await r.json());
-      if (v > 100 && v < 1000) {
-        rate = { v, date: date || new Date().toISOString().slice(0, 10), src: 'live' };
+      const [raw, date] = pick(await r.json());
+      const v = Number(raw);
+      if (okRate(v)) {
+        rate = { v, date: cleanDate(date), src: 'live' };
         store.set('rate', rate); break;
       }
     } catch {}
@@ -36,7 +41,7 @@ async function fetchRate() {
 $('rateBtn').onclick = fetchRate;
 $('manualSet').onclick = () => {
   const v = Number($('manualRate').value);
-  if (v > 100 && v < 1000) { rate = { v, date: new Date().toISOString().slice(0, 10), src: 'manual' }; store.set('rate', rate); showRate(); }
+  if (okRate(v)) { rate = { v, date: new Date().toISOString().slice(0, 10), src: 'manual' }; store.set('rate', rate); showRate(); }
 };
 
 // ---------- converter ----------
@@ -159,10 +164,10 @@ async function identify(src, sw, sh, framed) {
     const colour = colourFamily(...rgb);
     const w = await getWorker();
     out.textContent = 'Reading…';
-    let ocr = { best: null }, text = '';
-    for (const deg of [0, 180, 90, 270]) {
+    let ocr = { best: null };
+    for (const deg of [0, 180, 90, 270]) {          // each rotation parsed on its own text only
       const { data } = await w.recognize(deg ? rotated(canvas, deg) : canvas);
-      text += ' ' + data.text; ocr = readOcrText(text);
+      ocr = readOcrText(data.text);
       if (ocr.best) break;
     }
     showVerdict(verdict(ocr, colour), colour);

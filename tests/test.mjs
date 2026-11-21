@@ -37,4 +37,6 @@ t('OCR 500000 + green colour → flags colour mismatch', () => {
   const v = verdict(readOcrText('500000'), colourFamily(70, 150, 80));
   assert.equal(v.vnd, 500000); assert.equal(v.warnColour, true); assert.equal(v.blueCheck, true);
 });
+t('conflicting 20000 digits + 500k words → unconfirmed', () => assert.equal(readOcrText('20000 NAM TRAM NGHIN').best, null));
+t('digits split across lines are not joined', () => assert.equal(readOcrText('20\n000').best, null));
 console.log(`\n${n} passed`);

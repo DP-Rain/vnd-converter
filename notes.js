@@ -39,7 +39,7 @@ export function readOcrText(text) {
   const add = (v, w) => { scores[v] = (scores[v] || 0) + w; };
   // join "500 000" / "500.000" / "500,000" into "500000"
   let t = text.replace(/[Oo](?=\d)|(?<=\d)[Oo]/g, '0');
-  t = t.replace(/(\d)[\s.,'’]+(?=\d{3}(?!\d))/g, '$1');
+  t = t.replace(/(\d)[ .,'’]{1,2}(?=\d{3}(?!\d))/g, '$1');   // same line only
   for (const tok of t.match(/\d+/g) || []) {
     const n = Number(tok);
     if (DENOMS.includes(n)) add(n, tok.length >= 5 ? 3 : 2);
@@ -51,7 +51,10 @@ export function readOcrText(text) {
   const ranked = Object.entries(scores).map(([v, s]) => [Number(v), s]).sort((a, b) => b[1] - a[1]);
   if (!ranked.length) return { scores, best: null, margin: 0 };
   const margin = ranked[0][1] - (ranked[1] ? ranked[1][1] : 0);
-  return { scores, best: margin > 0 ? ranked[0][0] : null, margin };
+  const top = ranked[0][0];
+  // 20k/500k: any conflicting signal must be clearly outweighed, else unconfirmed
+  const need = CONFUSABLE.has(top) && ranked.length > 1 ? 2 : 1;
+  return { scores, best: margin >= need ? top : null, margin };
 }
 
 // rgb (0-255) average of note centre → colour family + candidate notes
