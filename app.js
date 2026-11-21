@@ -125,12 +125,19 @@ async function startCam() {
 }
 function stopCam() { if (stream) { stream.getTracks().forEach((t) => t.stop()); stream = null; } }
 
-// crop the dashed frame area, return {canvas, rgb}
-function grab(src, sw, sh, framed) {
-  const cx = framed ? sw * 0.08 : 0, cy = framed ? sh * 0.18 : 0;
-  const cw = framed ? sw * 0.84 : sw, ch = framed ? sh * 0.64 : sh;
-  const scale = Math.min(1, 1600 / cw);
-  const c = $('canvas'); c.width = Math.round(cw * scale); c.height = Math.round(ch * scale);
+// Map the dashed frame (inset 18% / 8% of the preview box) back to raw video pixels.
+// The preview uses object-fit:cover, so the camera frame is scaled + centre-cropped.
+function frameRect(vd) {
+  const W = vd.clientWidth, H = vd.clientHeight, vw = vd.videoWidth, vh = vd.videoHeight;
+  const k = Math.max(W / vw, H / vh);
+  const visW = W / k, visH = H / k, ox = (vw - visW) / 2, oy = (vh - visH) / 2;
+  return [ox + visW * 0.08, oy + visH * 0.18, visW * 0.84, visH * 0.64];
+}
+
+// crop → {gray, contrast, rgb}
+function grab(src, [cx, cy, cw, ch]) {
+  const scale = Math.min(1, 1600 / Math.max(cw, ch));
+  const c = document.createElement('canvas'); c.width = Math.round(cw * scale); c.height = Math.round(ch * scale);
   const g = c.getContext('2d', { willReadFrequently: true });
   g.drawImage(src, cx, cy, cw, ch, 0, 0, c.width, c.height);
   const px = g.getImageData(0, 0, c.width, c.height);
@@ -141,13 +148,16 @@ function grab(src, sw, sh, framed) {
       const i = (y * c.width + x) * 4; r += d[i]; gg += d[i + 1]; b += d[i + 2]; n++;
     }
   }
-  for (let i = 0; i < d.length; i += 4) {        // grayscale + contrast for OCR
-    let v = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-    v = Math.max(0, Math.min(255, (v - 128) * 1.6 + 128));
+  const hi = new ImageData(new Uint8ClampedArray(d), c.width, c.height);
+  for (let i = 0; i < d.length; i += 4) {
+    const v = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
     d[i] = d[i + 1] = d[i + 2] = v;
+    hi.data[i] = hi.data[i + 1] = hi.data[i + 2] = Math.max(0, Math.min(255, (v - 128) * 1.6 + 128));
   }
   g.putImageData(px, 0, 0);
-  return { canvas: c, rgb: [r / n, gg / n, b / n] };
+  const c2 = document.createElement('canvas'); c2.width = c.width; c2.height = c.height;
+  c2.getContext('2d').putImageData(hi, 0, 0);
+  return { gray: c, contrast: c2, rgb: [r / n, gg / n, b / n] };
 }
 function rotated(c, deg) {
   const o = document.createElement('canvas');
@@ -156,21 +166,28 @@ function rotated(c, deg) {
   const g = o.getContext('2d'); g.translate(o.width / 2, o.height / 2); g.rotate(deg * Math.PI / 180);
   g.drawImage(c, -c.width / 2, -c.height / 2); return o;
 }
-async function identify(src, sw, sh, framed) {
+async function identify(src, rect) {
   const out = $('scanOut');
   out.textContent = worker ? 'Reading…' : 'Loading reader (first time ~5 s)…';
+  const t0 = performance.now();
   try {
-    const { canvas, rgb } = grab(src, sw, sh, framed);
+    const { gray, contrast, rgb } = grab(src, rect);
     const colour = colourFamily(...rgb);
     const w = await getWorker();
-    out.textContent = 'Reading…';
-    let ocr = { best: null };
-    for (const deg of [0, 180, 90, 270]) {          // each rotation parsed on its own text only
-      const { data } = await w.recognize(deg ? rotated(canvas, deg) : canvas);
+    const passes = [[contrast, 0], [gray, 0], [contrast, 180], [gray, 180], [contrast, 90], [contrast, 270]];
+    let ocr = { best: null }, seen = '';
+    for (let i = 0; i < passes.length; i++) {        // each pass parsed on its own text only
+      out.textContent = `Reading… ${i + 1}/${passes.length}`;
+      const [img, deg] = passes[i];
+      const { data } = await w.recognize(deg ? rotated(img, deg) : img);
       ocr = readOcrText(data.text);
-      if (ocr.best) break;
+      if (!seen) seen = data.text.replace(/\s+/g, ' ').trim();
+      if (ocr.best) { seen = data.text.replace(/\s+/g, ' ').trim(); break; }
     }
     showVerdict(verdict(ocr, colour), colour);
+    const dbg = document.createElement('div'); dbg.className = 'small';
+    dbg.textContent = `Read in ${((performance.now() - t0) / 1000).toFixed(1)} s · saw: “${seen.slice(0, 80) || 'nothing'}”`;
+    out.appendChild(dbg);
   } catch (e) { out.textContent = 'Error: ' + (e.message || e); }
 }
 function showVerdict(v, colour) {
@@ -192,12 +209,12 @@ function showVerdict(v, colour) {
 $('scanBtn').onclick = async () => {
   await startCam(); const vd = $('video');
   if (!vd.videoWidth) return;
-  identify(vd, vd.videoWidth, vd.videoHeight, true);
+  identify(vd, frameRect(vd));
 };
 $('file').onchange = (e) => {
   const f = e.target.files[0]; if (!f) return;
   const img = new Image();
-  img.onload = () => { identify(img, img.naturalWidth, img.naturalHeight, false); URL.revokeObjectURL(img.src); };
+  img.onload = () => { identify(img, [0, 0, img.naturalWidth, img.naturalHeight]); URL.revokeObjectURL(img.src); };
   img.src = URL.createObjectURL(f); e.target.value = '';
 };
 
@@ -234,6 +251,10 @@ document.addEventListener('keydown', (e) => {
   if (b) b.click();
 });
 
+// new version installed → reload once so the phone runs it (not on very first install)
+if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+  navigator.serviceWorker.addEventListener('controllerchange', () => location.reload(), { once: true });
+}
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').then(() => navigator.serviceWorker.ready).then(offlineStatus).catch(() => {});
 showRate(); renderLog();
 if (navigator.onLine) fetchRate();
