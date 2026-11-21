@@ -209,6 +209,31 @@ document.querySelectorAll('nav button').forEach((b) => b.onclick = () => {
   if (b.dataset.tab === 'log') renderLog();
 });
 
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+// ---------- offline status ----------
+async function offlineStatus() {
+  const el = $('offline');
+  try {
+    const keys = await caches.keys();
+    const c = keys.find((k) => k.startsWith('vnd-'));
+    const n = c ? (await (await caches.open(c)).keys()).length : 0;
+    const ready = n >= 15;
+    el.textContent = ready ? (navigator.onLine ? '✓ Offline ready' : '✈ Offline mode') : '⏳ Saving for offline…';
+    el.className = ready ? 'ok' : '';
+    if (!ready) setTimeout(offlineStatus, 2000);
+  } catch { el.textContent = ''; }
+}
+window.addEventListener('online', () => { offlineStatus(); fetchRate(); });
+window.addEventListener('offline', offlineStatus);
+
+// physical keyboard (laptop) also works
+document.addEventListener('keydown', (e) => {
+  if (!$('tab-convert').classList.contains('active') || e.target.tagName === 'INPUT') return;
+  const k = e.key === 'Backspace' ? 'back' : e.key === 'Escape' ? 'clear' : /^\d$/.test(e.key) ? e.key : null;
+  if (!k) return;
+  const b = [...$('pad').children].find((x) => (x.dataset.k || x.textContent) === k);
+  if (b) b.click();
+});
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').then(() => navigator.serviceWorker.ready).then(offlineStatus).catch(() => {});
 showRate(); renderLog();
 if (navigator.onLine) fetchRate();

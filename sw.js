@@ -1,5 +1,5 @@
 // Offline cache: app shell + OCR engine. Bump VERSION on every deploy.
-const VERSION = 'vnd-v3';
+const VERSION = 'vnd-v4';
 const FILES = [
   './', 'index.html', 'style.css', 'app.js', 'calc.js', 'notes.js', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/icon-512.png',
