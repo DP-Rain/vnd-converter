@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>VND to Rupee</title>
+<meta name="theme-color" content="#0f1720">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <div class="rate" id="rateBar">
+    <span id="rateText">1 ₹ = … ₫</span>
+    <button id="rateBtn" class="chip" aria-label="Refresh rate">↻</button>
+  </div>
+</header>
+
+<main>
+  <!-- CONVERT -->
+  <section id="tab-convert" class="tab active">
+    <div class="display">
+      <div class="from"><span id="inVal">0</span> <span id="inUnit">₫</span></div>
+      <div class="to" id="outVal">₹0</div>
+      <div class="hint" id="hint"></div>
+    </div>
+    <div class="real" id="real"></div>
+    <div class="split">
+      <label>People <button class="chip" data-p="-1">−</button><b id="people">1</b><button class="chip" data-p="1">+</button></label>
+      <label>Tip <select id="tip"><option>0</option><option>5</option><option>10</option><option>15</option></select>%</label>
+      <span id="each"></span>
+    </div>
+    <div class="pad" id="pad">
+      <button>1</button><button>2</button><button>3</button>
+      <button>4</button><button>5</button><button>6</button>
+      <button>7</button><button>8</button><button>9</button>
+      <button class="k000">000</button><button>0</button><button data-k="back">⌫</button>
+      <button data-k="clear" class="alt">C</button><button data-k="swap" class="alt">⇅ ₹/₫</button><button data-k="log" class="alt">+ Log</button>
+    </div>
+  </section>
+
+  <!-- SCAN -->
+  <section id="tab-scan" class="tab">
+    <div class="cam">
+      <video id="video" playsinline muted></video>
+      <div class="frame"></div>
+      <canvas id="canvas" hidden></canvas>
+    </div>
+    <div class="row">
+      <button id="scanBtn" class="big">Read note</button>
+      <label class="big ghost">Photo<input id="file" type="file" accept="image/*" capture="environment" hidden></label>
+    </div>
+    <div id="scanOut" class="result">Hold note flat, number visible inside frame. Works offline.</div>
+  </section>
+
+  <!-- NOTES -->
+  <section id="tab-notes" class="tab">
+    <div class="warn"><b>Blue trap:</b> 20,000 (≈₹73) and 500,000 (≈₹1,818) both look blue. Always count zeros: <b>20 000</b> = 4 zeros, <b>500 000</b> = 5 zeros.</div>
+    <div id="noteList" class="notes"></div>
+    <p class="small">Colours and back pictures are approximate (not checked against State Bank of Vietnam). Trust the printed number.</p>
+  </section>
+
+  <!-- LOG -->
+  <section id="tab-log" class="tab">
+    <div class="logtot" id="logTot"></div>
+    <ul id="logList" class="log"></ul>
+    <button id="logClear" class="ghost">Clear log</button>
+    <details class="small"><summary>Manual rate</summary>
+      <p>VND per ₹ <input id="manualRate" type="number" step="0.01" inputmode="decimal"> <button id="manualSet" class="chip">Set</button></p>
+    </details>
+  </section>
+</main>
+
+<nav>
+  <button data-tab="convert" class="on">Convert</button>
+  <button data-tab="scan">Scan</button>
+  <button data-tab="notes">Notes</button>
+  <button data-tab="log">Log</button>
+</nav>
+
+<script src="vendor/tesseract.min.js"></script>
+<script type="module" src="app.js"></script>
+</body>
+</html>
